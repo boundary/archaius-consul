@@ -1,0 +1,194 @@
+package com.boundary.config;
+
+import com.ecwid.consul.v1.QueryParams;
+import com.ecwid.consul.v1.Response;
+import com.ecwid.consul.v1.kv.KeyValueClient;
+import com.ecwid.consul.v1.kv.model.GetValue;
+import com.google.common.base.Predicate;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.google.common.io.BaseEncoding;
+import com.google.common.util.concurrent.AbstractExecutionThreadService;
+import com.netflix.config.WatchedConfigurationSource;
+import com.netflix.config.WatchedUpdateListener;
+import com.netflix.config.WatchedUpdateResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.io.BaseEncoding.*;
+
+/**
+ * Implements WatchedConfigurationSource over a consul key-value store
+ */
+public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadService implements WatchedConfigurationSource {
+
+    private final Logger LOGGER = LoggerFactory.getLogger(ConsulWatchedConfigurationSource.class);
+    private final String rootPath;
+    private final KeyValueClient client;
+    private final long waitTime = TimeUnit.SECONDS.toSeconds(10);
+
+    private final AtomicReference<ImmutableMap<String, Object>> lastState = new AtomicReference<>(ImmutableMap.<String, Object>of());
+    private final AtomicLong latestIndex = new AtomicLong(0);
+
+    private List<WatchedUpdateListener> listeners = new CopyOnWriteArrayList<>();
+
+
+    private Response<List<GetValue>> getRaw(QueryParams params) {
+        return client.getKVValues(rootPath, params);
+    }
+
+
+    private Response<List<GetValue>> updateIndex(Response<List<GetValue>> response) {
+        if (response != null) {
+            this.latestIndex.set(response.getConsulIndex());
+        }
+        return response;
+    }
+
+    public ConsulWatchedConfigurationSource(String rootPath, KeyValueClient client, int watchIntervalSeconds) {
+        this.rootPath = checkNotNull(rootPath);
+        this.client = checkNotNull(client);
+    }
+
+
+    @Override
+    protected void startUp() throws Exception {
+        lastState.set(convertToMap(updateIndex(getRaw(QueryParams.DEFAULT))));
+        fireEvent(WatchedUpdateResult.createFull(lastState.get()));
+    }
+
+    private WatchedUpdateResult incrementalResult(
+            final ImmutableMap<String, Object> newState,
+            final ImmutableMap<String, Object> previousState) {
+
+        final Map<String, Object> added = Maps.newHashMap();
+        final Map<String, Object> removed = Maps.newHashMap();
+        final Map<String, Object> changed = Maps.newHashMap();
+
+        // added
+        addAllKeys(
+                Sets.difference(newState.keySet(), previousState.keySet()),
+                newState, added
+
+        );
+
+        // removed
+        addAllKeys(
+                Sets.difference(previousState.keySet(), newState.keySet()),
+                previousState, removed
+
+        );
+
+        // changed
+        addFilteredKeys(
+                Sets.intersection(previousState.keySet(), newState.keySet()),
+                newState, changed,
+                new Predicate<String>() {
+                    @Override
+                    public boolean apply(String key) {
+                        return !previousState.get(key).equals(newState.get(key));
+                    }
+                }
+        );
+        return WatchedUpdateResult.createIncremental(added, changed, removed);
+    }
+
+    private void addAllKeys(Set<String> keys, ImmutableMap<String, Object> source, Map<String, Object> dest) {
+        addFilteredKeys(keys, source, dest, new Predicate<String>() {
+            @Override
+            public boolean apply(String input) {
+                return true;
+            }
+        });
+    }
+
+    private void addFilteredKeys(Set<String> keys, ImmutableMap<String, Object> source, Map<String, Object> dest, Predicate<String> filter) {
+
+        for (String key: keys) {
+            if (filter.apply(key)) {
+                dest.put(key, source.get(key));
+            }
+        }
+
+    }
+
+    protected void fireEvent(WatchedUpdateResult result) {
+        for (WatchedUpdateListener l : listeners) {
+            try {
+                l.updateConfiguration(result);
+            } catch (Throwable ex) {
+                LOGGER.error("Error invoking WatchedUpdateListener", ex);
+            }
+        }
+    }
+
+    @Override
+    public void addUpdateListener(WatchedUpdateListener l) {
+        if (l != null) {
+            listeners.add(l);
+        }
+    }
+
+    @Override
+    public void removeUpdateListener(WatchedUpdateListener l) {
+        if (l != null) {
+            listeners.remove(l);
+        }
+    }
+
+    @Override
+    public Map<String, Object> getCurrentData() throws Exception {
+        return lastState.get();
+    }
+
+
+    private ImmutableMap<String, Object> convertToMap(Response<List<GetValue>> kv) {
+        if (kv == null || kv.getValue() == null) {
+            return ImmutableMap.of();
+        }
+        ImmutableMap.Builder<String, Object> builder = ImmutableMap.builder();
+        for(GetValue gv : kv.getValue()) {
+            builder.put(keyFunc(gv), valFunc(gv));
+        }
+        return builder.build();
+    }
+
+    private Object valFunc(GetValue getValue) {
+        return new String(base64().decode(getValue.getValue())).trim();
+    }
+
+    private String keyFunc(GetValue getValue) {
+        return getValue.getKey().substring(rootPath.length() + 1);
+    }
+
+    @Override
+    protected void run() throws Exception {
+        while (isRunning()) {
+            try {
+                Response<List<GetValue>> kvals = updateIndex(getRaw(watchParams()));
+                ImmutableMap<String, Object> full = ImmutableMap.copyOf(convertToMap(kvals));
+                WatchedUpdateResult result = incrementalResult(full, lastState.get());
+                lastState.set(full);
+                fireEvent(result);
+            } catch (Exception e) {
+                LOGGER.error("Error watching path", e);
+            }
+        }
+
+    }
+
+    private QueryParams watchParams() {
+        return new QueryParams(waitTime, latestIndex.get());
+    }
+
+}
