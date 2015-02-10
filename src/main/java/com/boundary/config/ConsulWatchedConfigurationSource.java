@@ -4,11 +4,11 @@ import com.ecwid.consul.v1.QueryParams;
 import com.ecwid.consul.v1.Response;
 import com.ecwid.consul.v1.kv.KeyValueClient;
 import com.ecwid.consul.v1.kv.model.GetValue;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.netflix.config.WatchedConfigurationSource;
 import com.netflix.config.WatchedUpdateListener;
@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.io.BaseEncoding.*;
+import static com.google.common.io.BaseEncoding.base64;
 
 /**
  * Implements WatchedConfigurationSource over a consul key-value store
@@ -37,7 +37,7 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
     private final KeyValueClient client;
     private final long waitTime = TimeUnit.SECONDS.toSeconds(10);
 
-    private final AtomicReference<ImmutableMap<String, Object>> lastState = new AtomicReference<>(ImmutableMap.<String, Object>of());
+    private final AtomicReference<ImmutableMap<String, Object>> lastState = new AtomicReference<>(null);
     private final AtomicLong latestIndex = new AtomicLong(0);
 
     private List<WatchedUpdateListener> listeners = new CopyOnWriteArrayList<>();
@@ -58,13 +58,6 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
     public ConsulWatchedConfigurationSource(String rootPath, KeyValueClient client, int watchIntervalSeconds) {
         this.rootPath = checkNotNull(rootPath);
         this.client = checkNotNull(client);
-    }
-
-
-    @Override
-    protected void startUp() throws Exception {
-        lastState.set(convertToMap(updateIndex(getRaw(QueryParams.DEFAULT))));
-        fireEvent(WatchedUpdateResult.createFull(lastState.get()));
     }
 
     private WatchedUpdateResult incrementalResult(
@@ -152,6 +145,11 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
     }
 
 
+    @VisibleForTesting
+    protected long getLatestIndex() {
+        return latestIndex.get();
+    }
+
     private ImmutableMap<String, Object> convertToMap(Response<List<GetValue>> kv) {
         if (kv == null || kv.getValue() == null) {
             return ImmutableMap.of();
@@ -174,17 +172,27 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
     @Override
     protected void run() throws Exception {
         while (isRunning()) {
-            try {
-                Response<List<GetValue>> kvals = updateIndex(getRaw(watchParams()));
-                ImmutableMap<String, Object> full = ImmutableMap.copyOf(convertToMap(kvals));
-                WatchedUpdateResult result = incrementalResult(full, lastState.get());
-                lastState.set(full);
-                fireEvent(result);
-            } catch (Exception e) {
-                LOGGER.error("Error watching path", e);
-            }
+            runOnce();
         }
 
+    }
+
+    @VisibleForTesting
+    protected void runOnce() {
+        try {
+            Response<List<GetValue>> kvals = updateIndex(getRaw(watchParams()));
+            ImmutableMap<String, Object> full = convertToMap(kvals);
+            final WatchedUpdateResult result;
+            if (lastState.get() == null) {
+                result = WatchedUpdateResult.createFull(full);
+            } else {
+                result = incrementalResult(full, lastState.get());
+            }
+            lastState.set(full);
+            fireEvent(result);
+        } catch (Exception e) {
+            LOGGER.error("Error watching path", e);
+        }
     }
 
     private QueryParams watchParams() {
