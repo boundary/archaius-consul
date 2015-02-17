@@ -6,7 +6,12 @@
 
     <groupId>com.boundary.config</groupId>
     <artifactId>archaius-consul</artifactId>
+    <packaging>jar</packaging>
     <version>0.1-SNAPSHOT</version>
+
+    <name>archaius-consul</name>
+    <description>A consul-backed configuration source for Archaius</description>
+    <url>https://github.com/boundary/archaius-consul</url>
 
     <properties>
         <httpcomp.version>4.2.5</httpcomp.version>
@@ -118,8 +123,27 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.2.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+    <scm>
+        <connection>scm:git:git@github.com:boundary/archaius-consul.git</connection>
+    </scm>
 
     <repositories>
         <repository>
@@ -128,4 +152,18 @@
             <url>http://nexus.ecwid.com/content/groups/public</url>
         </repository>
     </repositories>
+
+    <distributionManagement>
+        <repository>
+            <id>maven.boundary.com</id>
+            <name>maven.boundary.com-releases</name>
+            <url>http://maven.boundary.com/artifactory/external</url>
+        </repository>
+        <snapshotRepository>
+            <id>maven.boundary.com</id>
+            <name>maven.boundary.com-snapshots</name>
+            <url>http://maven.boundary.com/artifactory/external</url>
+        </snapshotRepository>
+    </distributionManagement>
+
 </project>
