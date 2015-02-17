@@ -35,7 +35,7 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
     private final Logger LOGGER = LoggerFactory.getLogger(ConsulWatchedConfigurationSource.class);
     private final String rootPath;
     private final KeyValueClient client;
-    private final long waitTime = TimeUnit.SECONDS.toSeconds(10);
+    private final long watchIntervalSeconds;
 
     private final AtomicReference<ImmutableMap<String, Object>> lastState = new AtomicReference<>(null);
     private final AtomicLong latestIndex = new AtomicLong(0);
@@ -55,9 +55,14 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
         return response;
     }
 
-    public ConsulWatchedConfigurationSource(String rootPath, KeyValueClient client, int watchIntervalSeconds) {
+    public ConsulWatchedConfigurationSource(String rootPath, KeyValueClient client) {
+        this(rootPath, client, 10, TimeUnit.SECONDS);
+    }
+
+    public ConsulWatchedConfigurationSource(String rootPath, KeyValueClient client, long watchInterval, TimeUnit watchIntervalUnit) {
         this.rootPath = checkNotNull(rootPath);
         this.client = checkNotNull(client);
+        this.watchIntervalSeconds = watchIntervalUnit.toSeconds(watchInterval);
     }
 
     private WatchedUpdateResult incrementalResult(
@@ -196,7 +201,7 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
     }
 
     private QueryParams watchParams() {
-        return new QueryParams(waitTime, latestIndex.get());
+        return new QueryParams(watchIntervalSeconds, latestIndex.get());
     }
 
 }

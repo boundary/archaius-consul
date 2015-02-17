@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.google.common.io.BaseEncoding.base64;
@@ -39,7 +40,7 @@ public class ConsulWatchedConfigurationSourceTest extends RandomizedTest {
 
     @Before
     public void setUp() {
-        configSource = new ConsulWatchedConfigurationSource(rootPath, client, watchInterval);
+        configSource = new ConsulWatchedConfigurationSource(rootPath, client, watchInterval, TimeUnit.SECONDS);
 
     }
 

@@ -8,6 +8,9 @@
     <artifactId>archaius-consul</artifactId>
     <version>0.1-SNAPSHOT</version>
 
+    <properties>
+        <httpcomp.version>4.2.5</httpcomp.version>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -43,13 +46,13 @@
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpcore</artifactId>
-            <version>4.2.5</version>
+            <version>${httpcomp.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
-            <version>4.2.5</version>
+            <version>${httpcomp.version}</version>
         </dependency>
 
         <!-- test dependencies -->
@@ -72,12 +75,6 @@
             <artifactId>randomizedtesting-runner</artifactId>
             <version>2.1.11</version>
             <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>junit</groupId>
-                    <artifactId>junit</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <dependency>
@@ -85,12 +82,6 @@
             <artifactId>logback-classic</artifactId>
             <version>1.1.2</version>
             <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-api</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
     </dependencies>
