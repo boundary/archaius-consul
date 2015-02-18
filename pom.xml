@@ -5,7 +5,7 @@
     <groupId>com.boundary.config</groupId>
     <artifactId>archaius-consul</artifactId>
     <packaging>jar</packaging>
-    <version>0.1</version>
+    <version>0.2-SNAPSHOT</version>
 
     <name>archaius-consul</name>
     <description>A consul-backed configuration source for Archaius</description>
@@ -141,7 +141,7 @@
 
     <scm>
         <connection>scm:git:git@github.com:boundary/archaius-consul.git</connection>
-      <tag>archaius-consul-0.1</tag>
+      <tag>HEAD</tag>
   </scm>
 
     <repositories>
