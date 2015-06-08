@@ -5,7 +5,7 @@
     <groupId>com.boundary.config</groupId>
     <artifactId>archaius-consul</artifactId>
     <packaging>jar</packaging>
-    <version>0.2-SNAPSHOT</version>
+    <version>0.3-SNAPSHOT</version>
 
     <name>archaius-consul</name>
     <description>A consul-backed configuration source for Archaius</description>
@@ -154,14 +154,14 @@
 
     <distributionManagement>
         <repository>
-            <id>maven.boundary.com</id>
-            <name>maven.boundary.com-releases</name>
-            <url>http://maven.boundary.com/artifactory/external</url>
+            <id>artifact-01.boundary.us-west-2</id>
+            <name>artifact-01.boundary.us-west-2-releases</name>
+            <url>https://artifact-01.boundary.us-west-2/artifactory/external</url>
         </repository>
         <snapshotRepository>
-            <id>maven.boundary.com</id>
-            <name>maven.boundary.com-snapshots</name>
-            <url>http://maven.boundary.com/artifactory/external</url>
+            <id>artifact-01.boundary.us-west-2</id>
+            <name>artifact-01.boundary.us-west-2-snapshots</name>
+            <url>https://artifact-01.boundary.us-west-2/artifactory/external</url>
         </snapshotRepository>
     </distributionManagement>
 
