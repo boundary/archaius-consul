@@ -172,13 +172,19 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
         }
         ImmutableMap.Builder<String, Object> builder = ImmutableMap.builder();
         for(GetValue gv : kv.getValue()) {
-            builder.put(keyFunc(gv), valFunc(gv));
+            Object value = valFunc(gv);
+
+            // do not store "folders"
+            if(value != null) {
+                builder.put(keyFunc(gv), value);
+            }
         }
         return builder.build();
     }
 
-    private Object valFunc(GetValue getValue) {
-        return new String(base64().decode(getValue.getValue())).trim();
+    private String valFunc(GetValue getValue) {
+        String value = getValue.getValue();
+        return value != null ? new String(base64().decode(value)) : null;
     }
 
     private String keyFunc(GetValue getValue) {
@@ -194,7 +200,7 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
     }
 
     @VisibleForTesting
-    protected void runOnce() {
+    protected void runOnce() throws InterruptedException {
         try {
             Response<List<GetValue>> kvals = updateIndex(getRaw(watchParams()));
             ImmutableMap<String, Object> full = convertToMap(kvals);
@@ -207,7 +213,8 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
             lastState.set(full);
             fireEvent(result);
         } catch (Exception e) {
-            LOGGER.error("Error watching path", e);
+            LOGGER.error("Error watching path, waiting to retry", e);
+            Thread.sleep(5000);
         }
     }
 
