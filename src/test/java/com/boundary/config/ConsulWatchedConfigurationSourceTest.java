@@ -51,7 +51,7 @@ public class ConsulWatchedConfigurationSourceTest extends RandomizedTest {
 
         final Response<List<GetValue>> expected = randomListGetValueResponse();
 
-        when(client.getKVValues(eq(rootPath), any(QueryParams.class))).thenReturn(expected);
+        when(client.getKVValues(eq(rootPath), any(String.class), any(QueryParams.class))).thenReturn(expected);
 
         assertThat(configSource.getCurrentData(), nullValue());
 
@@ -77,6 +77,7 @@ public class ConsulWatchedConfigurationSourceTest extends RandomizedTest {
 
     @Test
     @Repeat(iterations = 5)
+    @SuppressWarnings("unchecked")
     public void testAdded() throws Exception {
 
         final Response<List<GetValue>> initialResponse = randomListGetValueResponse();
@@ -84,8 +85,8 @@ public class ConsulWatchedConfigurationSourceTest extends RandomizedTest {
         final List<GetValue> updatedList = Lists.newArrayList(initialResponse.getValue());
         updatedList.add(added);
         final Response<List<GetValue>> initialResponsePlus = randomResponse(updatedList);
-        //noinspection unchecked
-        when(client.getKVValues(eq(rootPath), any(QueryParams.class))).thenReturn(initialResponse, initialResponsePlus);
+
+        when(client.getKVValues(eq(rootPath), any(String.class), any(QueryParams.class))).thenReturn(initialResponse, initialResponsePlus);
 
         UpdateListener listener = new UpdateListener();
         configSource.addUpdateListener(listener);
@@ -112,6 +113,7 @@ public class ConsulWatchedConfigurationSourceTest extends RandomizedTest {
 
     @Test
     @Repeat(iterations = 5)
+    @SuppressWarnings("unchecked")
     public void testRemoved() throws Exception {
 
         final Response<List<GetValue>> initialResponse = randomListGetValueResponse();
@@ -119,8 +121,7 @@ public class ConsulWatchedConfigurationSourceTest extends RandomizedTest {
         final List<GetValue> updatedList = Lists.newArrayList(initialResponse.getValue());
         updatedList.remove(removed);
         final Response<List<GetValue>> initialResponseMinus = randomResponse(updatedList);
-        //noinspection unchecked
-        when(client.getKVValues(eq(rootPath), any(QueryParams.class))).thenReturn(initialResponse, initialResponseMinus);
+        when(client.getKVValues(eq(rootPath), any(String.class), any(QueryParams.class))).thenReturn(initialResponse, initialResponseMinus);
 
         UpdateListener listener = new UpdateListener();
         configSource.addUpdateListener(listener);
@@ -148,6 +149,7 @@ public class ConsulWatchedConfigurationSourceTest extends RandomizedTest {
 
     @Test
     @Repeat(iterations = 5)
+    @SuppressWarnings("unchecked")
     public void testChanged() throws Exception {
 
         final Response<List<GetValue>> initialResponse = randomListGetValueResponse();
@@ -161,8 +163,7 @@ public class ConsulWatchedConfigurationSourceTest extends RandomizedTest {
         updatedList.add(changed);
 
         final Response<List<GetValue>> initialResponseChanged = randomResponse(updatedList);
-        //noinspection unchecked
-        when(client.getKVValues(eq(rootPath), any(QueryParams.class))).thenReturn(initialResponse, initialResponseChanged);
+        when(client.getKVValues(eq(rootPath), any(String.class), any(QueryParams.class))).thenReturn(initialResponse, initialResponseChanged);
 
         UpdateListener listener = new UpdateListener();
         configSource.addUpdateListener(listener);

@@ -10,9 +10,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
+import com.google.common.util.concurrent.MoreExecutors;
+
 import com.netflix.config.WatchedConfigurationSource;
 import com.netflix.config.WatchedUpdateListener;
 import com.netflix.config.WatchedUpdateResult;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -32,19 +36,21 @@ import static com.google.common.io.BaseEncoding.base64;
  */
 public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadService implements WatchedConfigurationSource {
 
-    private final Logger LOGGER = LoggerFactory.getLogger(ConsulWatchedConfigurationSource.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ConsulWatchedConfigurationSource.class);
+
     private final String rootPath;
     private final KeyValueClient client;
     private final long watchIntervalSeconds;
 
     private final AtomicReference<ImmutableMap<String, Object>> lastState = new AtomicReference<>(null);
     private final AtomicLong latestIndex = new AtomicLong(0);
+    private final String aclToken;
 
     private List<WatchedUpdateListener> listeners = new CopyOnWriteArrayList<>();
 
 
     private Response<List<GetValue>> getRaw(QueryParams params) {
-        return client.getKVValues(rootPath, params);
+        return client.getKVValues(rootPath, aclToken, params);
     }
 
 
@@ -59,10 +65,19 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
         this(rootPath, client, 10, TimeUnit.SECONDS);
     }
 
+    public ConsulWatchedConfigurationSource(String rootPath, KeyValueClient client, String aclToken) {
+        this(rootPath, client, 10, TimeUnit.SECONDS, aclToken);
+    }
+
     public ConsulWatchedConfigurationSource(String rootPath, KeyValueClient client, long watchInterval, TimeUnit watchIntervalUnit) {
+        this(rootPath, client, watchInterval, watchIntervalUnit, null);
+    }
+
+    public ConsulWatchedConfigurationSource(String rootPath, KeyValueClient client, long watchInterval, TimeUnit watchIntervalUnit, String aclToken) {
         this.rootPath = checkNotNull(rootPath);
         this.client = checkNotNull(client);
         this.watchIntervalSeconds = watchIntervalUnit.toSeconds(watchInterval);
+        this.aclToken = aclToken;
     }
 
     private WatchedUpdateResult incrementalResult(
@@ -161,13 +176,19 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
         }
         ImmutableMap.Builder<String, Object> builder = ImmutableMap.builder();
         for(GetValue gv : kv.getValue()) {
-            builder.put(keyFunc(gv), valFunc(gv));
+            Object value = valFunc(gv);
+
+            // do not store "folders"
+            if(value != null) {
+                builder.put(keyFunc(gv), value);
+            }
         }
         return builder.build();
     }
 
-    private Object valFunc(GetValue getValue) {
-        return new String(base64().decode(getValue.getValue())).trim();
+    private String valFunc(GetValue getValue) {
+        String value = getValue.getValue();
+        return value != null ? new String(base64().decode(value)) : null;
     }
 
     private String keyFunc(GetValue getValue) {
@@ -182,8 +203,7 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
 
     }
 
-    @VisibleForTesting
-    protected void runOnce() {
+    public void runOnce() throws InterruptedException {
         try {
             Response<List<GetValue>> kvals = updateIndex(getRaw(watchParams()));
             ImmutableMap<String, Object> full = convertToMap(kvals);
@@ -196,7 +216,8 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
             lastState.set(full);
             fireEvent(result);
         } catch (Exception e) {
-            LOGGER.error("Error watching path", e);
+            LOGGER.error("Error watching path, waiting to retry", e);
+            Thread.sleep(5000);
         }
     }
 
@@ -204,4 +225,16 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
         return new QueryParams(watchIntervalSeconds, latestIndex.get());
     }
 
+    @Override
+    protected Executor executor() {
+        return new Executor() {
+            @Override
+            public void execute(Runnable command) {
+                Thread thread = MoreExecutors.platformThreadFactory().newThread(command);
+                thread.setDaemon(true);
+                thread.setName(serviceName());
+                thread.start();
+            }
+        };
+    }
 }
