@@ -10,9 +10,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
+import com.google.common.util.concurrent.MoreExecutors;
+
 import com.netflix.config.WatchedConfigurationSource;
 import com.netflix.config.WatchedUpdateListener;
 import com.netflix.config.WatchedUpdateResult;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -199,8 +203,7 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
 
     }
 
-    @VisibleForTesting
-    protected void runOnce() throws InterruptedException {
+    public void runOnce() throws InterruptedException {
         try {
             Response<List<GetValue>> kvals = updateIndex(getRaw(watchParams()));
             ImmutableMap<String, Object> full = convertToMap(kvals);
@@ -222,4 +225,16 @@ public class ConsulWatchedConfigurationSource extends AbstractExecutionThreadSer
         return new QueryParams(watchIntervalSeconds, latestIndex.get());
     }
 
+    @Override
+    protected Executor executor() {
+        return new Executor() {
+            @Override
+            public void execute(Runnable command) {
+                Thread thread = MoreExecutors.platformThreadFactory().newThread(command);
+                thread.setDaemon(true);
+                thread.setName(serviceName());
+                thread.start();
+            }
+        };
+    }
 }
